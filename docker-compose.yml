@@ -1,0 +1,55 @@
+# LogiStock SA : application complète (base de données + API Java + interface web)
+#
+#   Démarrer          docker compose up -d --build
+#   Voir les journaux docker compose logs -f backend
+#   Tout arrêter      docker compose down
+#   Repartir de zéro  docker compose down -v && docker compose up -d --build
+#
+# Interface web : http://localhost:8081
+# API REST      : http://localhost:8080/api   (documentation : http://localhost:8080/swagger-ui.html)
+
+services:
+  db:
+    image: postgres:16
+    container_name: logistock-db
+    environment:
+      POSTGRES_DB: logistock
+      POSTGRES_USER: ${DB_USER:-logistock}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-logistock_dev}
+    ports:
+      - "5432:5432"
+    volumes:
+      - logistock-data:/var/lib/postgresql/data
+      # Exécutés dans l'ordre alphabétique au premier démarrage seulement
+      - ./db/01_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - ./db/02_donnees_demo.sql:/docker-entrypoint-initdb.d/02_donnees_demo.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-logistock} -d logistock"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  backend:
+    build: ./backend
+    container_name: logistock-backend
+    environment:
+      DB_URL: jdbc:postgresql://db:5432/logistock
+      DB_USER: ${DB_USER:-logistock}
+      DB_PASSWORD: ${DB_PASSWORD:-logistock_dev}
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-logistock-a-changer-en-production-0123456789}
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+
+  frontend:
+    build: ./frontend
+    container_name: logistock-frontend
+    depends_on:
+      - backend
+    ports:
+      - "8081:80"
+
+volumes:
+  logistock-data:
